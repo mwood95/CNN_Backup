@@ -61,7 +61,7 @@ void CNN_application_thread() {
 	 ********************************************************************************************/
 
 	// Initialize Network parameters
-	long len_img = 8;
+	long len_img = 16;
 	int len_fil = 3;
 	int len_out;
 	int len_out_pool;
