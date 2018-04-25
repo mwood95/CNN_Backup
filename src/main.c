@@ -32,9 +32,14 @@
 
 #include <stdio.h>
 #include "xparameters.h"
+#include "xaxidma.h"
 #include "netif/xadapter.h"
 #include "platform_config.h"
 #include "xil_printf.h"
+#include "DMA.h"
+#include "ps7_init.h"
+#include "xstatus.h"
+//#include "lwipopts.h"
 
 #if LWIP_DHCP==1
 #include "lwip/dhcp.h"
@@ -60,7 +65,11 @@ err_t dhcp_start(struct netif *netif);
 #endif
 
 #define THREAD_STACKSIZE 1024
-
+/************************** Variable Definitions *****************************/
+/*
+ * Device instance definitions
+ */
+XAxiDma AxiDma;
 static struct netif server_netif;
 struct netif *echo_netif;
 
@@ -83,6 +92,7 @@ print_ip_settings(struct ip_addr *ip, struct ip_addr *mask, struct ip_addr *gw)
 
 int main()
 {
+	ps7_post_config();
 	sys_thread_new("main_thrd", (void(*)(void*))main_thread, 0,
 	                THREAD_STACKSIZE,
 	                DEFAULT_THREAD_PRIO);
@@ -157,17 +167,19 @@ void network_thread(void *p)
 
     print_echo_app_header();
     xil_printf("\r\n");
-    sys_thread_new("echod", udp_echo_application_thread, 0,
+  /*  sys_thread_new("echod", udp_echo_application_thread, 0,)
 		THREAD_STACKSIZE,
 		DEFAULT_THREAD_PRIO);
-    vTaskDelete(NULL);
+    */vTaskDelete(NULL);
 #endif
     return;
 }
 
 int main_thread()
 {
-	printf("Starting Main Thread...");
+	XAxiDma_Config *CfgPtr;
+	int Status;
+	printf("Starting Main Thread...\n");
 #if LWIP_DHCP==1
 	int mscnt = 0;
 #endif
@@ -203,15 +215,44 @@ int main_thread()
 			/* print all application headers */
 			xil_printf("\r\n");
 			xil_printf("%20s %6s %s\r\n", "Server", "Port", "Connect With..");
-			xil_printf("%20s %6s %s\r\n", "--------------------", "------", "--------------------");
+			xil_printf("%20s %6s %s\r\n", "--------------------", "------", "--------------------\n");
 
 			print_echo_app_header();
+
+			printf("---------------------------------------------\n");
+			printf("--------- Starting Main Application ---------\n");
+			printf("---------------------------------------------\n");
 			xil_printf("\r\n");
+
+			CfgPtr = XAxiDma_LookupConfig(XPAR_AXI_DMA_DEVICE_ID);
+				if (CfgPtr == NULL) {
+					xil_printf("No config found for %d\r\n", XPAR_AXI_DMA_DEVICE_ID);
+					return XST_FAILURE;
+				}
+
+				Status = XAxiDma_CfgInitialize(&AxiDma, CfgPtr);
+				if (Status != XST_SUCCESS) {
+					xil_printf("Initialization failed %d\r\n", Status);
+					return XST_FAILURE;
+				}
+
+				if(XAxiDma_HasSg(&AxiDma)){
+					xil_printf("Device configured as SG mode \r\n");
+					return XST_FAILURE;
+				}
+
+				/* Disable interrupts, we use polling mode
+				 */
+				XAxiDma_IntrDisable(&AxiDma, XAXIDMA_IRQ_ALL_MASK, XAXIDMA_DEVICE_TO_DMA);
+				XAxiDma_IntrDisable(&AxiDma, XAXIDMA_IRQ_ALL_MASK, XAXIDMA_DMA_TO_DEVICE);
+				xil_printf("DMA Initialized...\n\n");
+
 
 			// Create Application Thread
 			sys_thread_new("echod", echo_application_thread, 0, THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 			sys_thread_new("CNN", CNN_application_thread, 0, THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 			break;
+
 		}
 	}
 #endif

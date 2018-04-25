@@ -42,6 +42,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
+#include "lwipopts.h"
 
 #define THREAD_STACKSIZE 1024
 #define REMOTE_IP "192.168.1.15"
@@ -158,7 +159,7 @@ void echo_application_thread() {
 			{
 				//printf("----------Network Control Packet----------\n");
 				image_length = packet.Size;
-;
+
 				if(image_length != 0)
 				{
 					printf("Image Size %d\n", packet.Size);

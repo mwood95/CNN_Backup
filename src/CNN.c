@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <string.h>
+#include "xaxidma_hw.h"
+#include "xaxidma.h"
 
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
@@ -9,13 +11,15 @@
 #include "xil_printf.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "queue.h"
+#include "DMA.h"
 
 #include "RLU.h"
 #include "FullyConnected.h"
 #include "Backprop.h"
 extern int start;
 extern int set;
-
+XAxiDma AxiDma;
 /*********************************************************************************
  *  Queue Handles:
  *
@@ -59,9 +63,9 @@ void CNN_application_thread() {
 	 * 				layer of the CNN.
 	 *
 	 ********************************************************************************************/
-
+	uint32_t RxBuffer;
 	// Initialize Network parameters
-	long len_img = 16;
+	long len_img = 8;
 	int len_fil = 3;
 	int len_out;
 	int len_out_pool;
@@ -124,13 +128,29 @@ void CNN_application_thread() {
 	// Initialize filter
 	filter_init(fil_ptr, len_fil, len_fil);
 
+	int Status;
+	for(i = 0; i < 128; i = i + 1)
+	{
+		Status = XAxiDma_SimpleTransfer(&AxiDma, 1, 32, XAXIDMA_DEVICE_TO_DMA);
+		if(Status != XST_SUCCESS)
+		{
+			printf("Error sending data to DMA\n\n");
+		}
+	}
+	while ((XAxiDma_Busy(&AxiDma,XAXIDMA_DEVICE_TO_DMA)) ||
+		(XAxiDma_Busy(&AxiDma,XAXIDMA_DMA_TO_DEVICE))) {
+			/* Wait */
+	}
+	printf("Wainting for data from DMA...\n");
+	Status = XAxiDma_SimpleTransfer(&AxiDma, RxBuffer, 32, XAXIDMA_DMA_TO_DEVICE);
+	printf("%d\n", RxBuffer);
 	while(1)
 	{
 		// Iterate through network process
 		while ((result) < acc) {
 			if (set == 1) {
 				// Wait for control packet. Set image length variable
-				xQueueReceive(xQueue2, (void *)&len_img, 0);
+				xQueueReceive(xQueue2, len_img, 0);
 
 				xQueueReceive(xQueue1, (void *)&target, 0);
 				printf("Target Value: %d\n", target);
